@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { runMcpSearches } from "./hardware-watch-mcp.js";
+import { detectPriceDrops, type PriceSnapshotListing } from "./hardware-watch-delta.js";
 import { loadActiveWatchConfig } from "./hardware-watch-config.js";
 import {
   candidateScore,
@@ -126,6 +127,31 @@ async function loadState(): Promise<State> {
 
 const isSyntheticPlaceholderId = (id: unknown): boolean => typeof id === "string" && id.includes("IN_MEMORY_MARKETPLACE_FEED_STORY_ENT");
 
+// Only compare with the exact previous completed report, never an unrelated
+// historical file or a fabricated baseline. If unavailable, mark unavailable.
+async function loadPreviousPriceSnapshot(state: State): Promise<PriceSnapshotListing[] | null> {
+  if (!state.lastRunAt) return null;
+  try {
+    const filenames = (await readdir(outputRoot)).filter((name) => name.startsWith("report-") && name.endsWith(".json"));
+    for (const name of filenames) {
+      const report = JSON.parse(await readFile(resolve(outputRoot, name), "utf8")) as {
+        runAt?: unknown;
+        rawListings?: unknown;
+      };
+      if (report.runAt !== state.lastRunAt) continue;
+      if (!Array.isArray(report.rawListings)) return null;
+      return report.rawListings.filter((item): item is PriceSnapshotListing =>
+        Boolean(item) && typeof item === "object" && typeof item.id === "string"
+        && typeof item.title === "string" && typeof item.price === "string"
+        && typeof item.url === "string" && typeof item.kind === "string"
+        && typeof item.location === "string" && !isSyntheticPlaceholderId(item.id));
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 async function loadPreviousSnapshotIds(state: State): Promise<Set<string> | null> {
   if (!state.lastRunAt) return null;
   if (Array.isArray(state.lastSnapshotIds)) return new Set(state.lastSnapshotIds.filter((id) => !isSyntheticPlaceholderId(id)));
@@ -154,6 +180,7 @@ function markdownReport(report: any): string {
     `New verified-local qualifying IDs not in prior watcher state: ${report.newListings.length}`,
     `Mac bargains needing location review: ${report.macNeedsLocationReview.length}`,
     `Mac offers Facebook reports posted within 7 days: ${report.recentMacPosts.length}`,
+    `Documented price decreases since prior exact report: ${report.priceDrops === null ? "unavailable" : report.priceDrops.length}`,
     `New IDs since previous comparable snapshot: ${report.snapshotComparisonStatus === "available" ? report.newSincePreviousSnapshot.length : "unavailable"}`,
     "Facebook posting timestamps are provider-reported, not independently verified; first-seen and newly posted are different concepts.",
     `Disappeared since previous snapshot: ${report.disappearedSincePreviousSnapshot.length}`,
@@ -171,6 +198,13 @@ function markdownReport(report: any): string {
   for (const listing of report.newListings) {
     lines.push(`- **${listing.title}** — ${listing.price} — ${listing.location} — ${listing.url}`);
     lines.push(`  - category: ${listing.kind}; score: ${listing.score}; distance: ${listing.distanceLabel}; pending: ${listing.is_pending}`);
+  }
+  lines.push("", "## Asking-price reductions since the previous saved report", "");
+  if (report.priceDrops === null) lines.push("Prior price evidence unavailable; no price change claim can be made.");
+  else if (!report.priceDrops.length) lines.push("No asking-price decreases identified among listings returned in both reports.");
+  for (const listing of report.priceDrops ?? []) {
+    lines.push(`- **${listing.title}** — ${listing.oldPrice} → ${listing.newPrice} (down ${listing.percentDecrease}%) — ${listing.location} — ${listing.url}`);
+    lines.push(`  - locality: ${listing.distanceStatus}; prior/current Marketplace asking prices, not verified transactions`);
   }
   lines.push("", "## Mac bargains — location needs verification (NOT confirmed local)", "");
   for (const listing of report.macNeedsLocationReview) {
@@ -278,6 +312,7 @@ const rawListings = [...allListings.values()].map((listing) => {
   };
 });
 const genuineListings = rawListings.filter((listing) => !listing.diagnosticOnly);
+const priceDrops = detectPriceDrops(await loadPreviousPriceSnapshot(state), genuineListings);
 // Keep the local-only alert contract unchanged. Unverified locations are
 // visible for manual review without being misrepresented as confirmed nearby.
 const macNeedsLocationReview = genuineListings
@@ -333,6 +368,7 @@ const report = {
   errors,
   coverageWarnings,
   newListings,
+  priceDrops,
   macNeedsLocationReview,
   recentMacPosts,
   newSincePreviousSnapshot: snapshotComparisonStatus === "available" ? newSincePreviousSnapshot : [],
