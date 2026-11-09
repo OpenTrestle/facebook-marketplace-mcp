@@ -5,12 +5,13 @@
  */
 import { execFile as execFileCallback } from "node:child_process";
 import { readdir, readFile, stat } from "node:fs/promises";
-import { homedir, platform } from "node:os";
+import { platform } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { pathToFileURL } from "node:url";
 import { hasMacMiniSearch, loadActiveWatchConfig, configPaths } from "./hardware-watch-config.js";
+import { resolveWatchDriveFolder } from "./hardware-watch-drive.js";
 
 const execFile = promisify(execFileCallback);
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -47,27 +48,6 @@ async function readLaunchdLabels(): Promise<{ status: string; matches: string[] 
   } catch {
     return { status: "unavailable", matches: [] };
   }
-}
-
-async function driveFolderPresence(): Promise<{ configuredPathExists: boolean | null; autoDiscovered: boolean }> {
-  const configured = process.env.HARDWARE_WATCH_DRIVE_FOLDER_PATH;
-  if (configured) {
-    try { return { configuredPathExists: (await stat(configured)).isDirectory(), autoDiscovered: false }; }
-    catch { return { configuredPathExists: false, autoDiscovered: false }; }
-  }
-  try {
-    const cloud = join(homedir(), "Library", "CloudStorage");
-    const entries = await readdir(cloud, { withFileTypes: true });
-    for (const entry of entries) {
-      if (!entry.isDirectory() || !entry.name.startsWith("GoogleDrive-")) continue;
-      try {
-        if ((await stat(join(cloud, entry.name, "My Drive", "Hardware Watch Alert Inbox"))).isDirectory()) {
-          return { configuredPathExists: null, autoDiscovered: true };
-        }
-      } catch { /* No authorized matching folder in this mount. */ }
-    }
-  } catch { /* Cloud Storage may be absent. */ }
-  return { configuredPathExists: null, autoDiscovered: false };
 }
 
 export async function diagnoseWatch(root: string, now = new Date()): Promise<Record<string, unknown>> {
@@ -130,7 +110,15 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   const root = resolve(process.env.HARDWARE_WATCH_OUTPUT_DIR ?? join(repoRoot, ".local", "hardware-watch"));
   const result = await diagnoseWatch(root);
   const launchd = await readLaunchdLabels();
-  const drive = await driveFolderPresence();
+  const driveResolution = await resolveWatchDriveFolder({ configuredPath: process.env.HARDWARE_WATCH_DRIVE_FOLDER_PATH });
+  const drive = {
+    status: driveResolution.status,
+    configuredPathExists: driveResolution.status === "configured" ? true
+      : driveResolution.status === "invalid_config" ? false : null,
+    autoDiscovered: driveResolution.status === "auto_discovered",
+    matches: driveResolution.matches,
+    // Do not print private sync paths in the generic diagnostic report.
+  };
   console.log(JSON.stringify({ ...result, launchd, drive, validationNeeded: [
     "Verify that actual local scheduled job exists and references this checkout.",
     "Verify Facebook authentication with a separate approved bounded read-only search.",
