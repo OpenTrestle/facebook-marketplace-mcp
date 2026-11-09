@@ -6,7 +6,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { runMcpSearches } from "./hardware-watch-mcp.js";
 import { detectPriceDrops, type PriceSnapshotListing } from "./hardware-watch-delta.js";
-import { loadActiveWatchConfig } from "./hardware-watch-config.js";
+import { hasMacMiniSearch, loadActiveWatchConfig } from "./hardware-watch-config.js";
 import {
   candidateScore,
   classifyDistance,
@@ -343,7 +343,7 @@ const reappearedSincePreviousSnapshot = previousSnapshotIds === null
 
 const nextSeenIds = [...new Set([...state.seenIds, ...currentIds])].slice(-5000);
 const coverageWarnings: string[] = [];
-if (!queries.some((query) => query.kind === "mac" && /mac\\s+mini/i.test(query.query))) {
+if (!hasMacMiniSearch(queries)) {
   coverageWarnings.push("Active configuration has no Mac mini search. Mini inventory will be missed until an approved configuration is applied.");
 }
 const saturatedMacQueries = results.filter((result) => {
