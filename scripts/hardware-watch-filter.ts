@@ -109,14 +109,18 @@ export function haversineDistanceKm(
   return 6_371 * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
 }
 
-export function classifyDistance(listing: WatchListing): DistanceResult {
+export function classifyDistance(
+  listing: WatchListing,
+  center: { latitude: number; longitude: number } = WATCH_CENTER,
+  radiusKm: number = WATCH_RADIUS_KM,
+): DistanceResult {
   const coordinates = coordinatePair(listing);
   const method = coordinates ? "coordinates" : "known_location";
   const usableCoordinates = coordinates ?? knownLocationCoordinates(listing.location);
   if (!usableCoordinates) return { status: "unverified", distanceKm: null, method: "unverified" };
-  const distanceKm = haversineDistanceKm(WATCH_CENTER, usableCoordinates);
+  const distanceKm = haversineDistanceKm(center, usableCoordinates);
   return {
-    status: distanceKm <= WATCH_RADIUS_KM ? "in_radius" : "out_of_radius",
+    status: distanceKm <= radiusKm ? "in_radius" : "out_of_radius",
     distanceKm: Math.round(distanceKm * 10) / 10,
     method,
   };
@@ -165,7 +169,9 @@ export function candidateScore(listing: WatchListing, kind: string): number {
 export function qualifiesAsLocalCandidate(
   listing: WatchListing,
   kind: string,
+  center: { latitude: number; longitude: number } = WATCH_CENTER,
+  radiusKm: number = WATCH_RADIUS_KM,
 ): boolean {
-  const distance = classifyDistance(listing);
+  const distance = classifyDistance(listing, center, radiusKm);
   return distance.status === "in_radius" && candidateScore(listing, kind) >= 0;
 }
