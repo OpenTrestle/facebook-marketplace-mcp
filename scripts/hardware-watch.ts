@@ -160,6 +160,10 @@ function markdownReport(report: any): string {
     `Reappeared after an absence: ${report.reappearedSincePreviousSnapshot.length}`,
     `Search errors: ${report.errors.length}`,
     "",
+    "## Coverage warnings",
+    "",
+    ...(report.coverageWarnings.length ? report.coverageWarnings.map((warning: string) => `- ${warning}`) : ["No known query-coverage warnings."]),
+    "",
     "## New candidates",
     "",
   ];
@@ -302,6 +306,17 @@ const reappearedSincePreviousSnapshot = previousSnapshotIds === null
   : [...currentIds].filter((id) => !previousSnapshotIds.has(id) && previousIds.has(id));
 
 const nextSeenIds = [...new Set([...state.seenIds, ...currentIds])].slice(-5000);
+const coverageWarnings: string[] = [];
+if (!queries.some((query) => query.kind === "mac" && /mac\\s+mini/i.test(query.query))) {
+  coverageWarnings.push("Active configuration has no Mac mini search. Mini inventory will be missed until an approved configuration is applied.");
+}
+const saturatedMacQueries = results.filter((result) => {
+  const query = queries.find((item) => item.kind === "mac" && item.query === result.query);
+  return query && result.kind === "mac" && !result.error && result.count >= query.limit;
+});
+if (saturatedMacQueries.length) {
+  coverageWarnings.push(`${saturatedMacQueries.length} Mac searches hit their per-query result cap. Newer listings may exist beyond the bounded sample.`);
+}
 const report = {
   runAt,
   previousRunAt: state.lastRunAt,
@@ -316,6 +331,7 @@ const report = {
   detailsFetched: 0,
   results,
   errors,
+  coverageWarnings,
   newListings,
   macNeedsLocationReview,
   recentMacPosts,
