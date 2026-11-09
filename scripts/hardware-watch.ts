@@ -1,11 +1,11 @@
-import { copyFile, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
+import { copyFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { runMcpSearches } from "./hardware-watch-mcp.js";
 import { detectPriceDrops, type PriceSnapshotListing } from "./hardware-watch-delta.js";
+import { resolveWatchDriveFolder } from "./hardware-watch-drive.js";
 import { hasMacMiniSearch, loadActiveWatchConfig } from "./hardware-watch-config.js";
 import {
   candidateScore,
@@ -18,7 +18,6 @@ const outputRoot = resolve(
   process.env.HARDWARE_WATCH_OUTPUT_DIR ?? resolve(repoRoot, ".local/hardware-watch"),
 );
 const statePath = resolve(outputRoot, "state.json");
-const driveFolderName = "Hardware Watch Alert Inbox";
 
 const activeConfig = await loadActiveWatchConfig(outputRoot);
 const center = activeConfig.center;
@@ -50,44 +49,21 @@ type DriveUpload = {
   error?: string;
 };
 
-async function resolveDriveFolder(): Promise<string | null> {
-  const configured = process.env.HARDWARE_WATCH_DRIVE_FOLDER_PATH;
-  if (configured) {
-    try {
-      if ((await stat(configured)).isDirectory()) return configured;
-    } catch {
-      return null;
-    }
-  }
-
-  const cloudStorageRoot = resolve(homedir(), "Library/CloudStorage");
-  try {
-    const entries = await readdir(cloudStorageRoot, { withFileTypes: true });
-    for (const entry of entries) {
-      if (!entry.isDirectory() || !entry.name.startsWith("GoogleDrive-")) continue;
-      const candidate = resolve(cloudStorageRoot, entry.name, "My Drive", driveFolderName);
-      try {
-        if ((await stat(candidate)).isDirectory()) return candidate;
-      } catch {
-        // Try the next mounted account without exposing account details in output.
-      }
-    }
-  } catch {
-    return null;
-  }
-  return null;
-}
-
 async function uploadReports(reportPaths: string[], hasErrors: boolean): Promise<DriveUpload> {
   if (process.env.HARDWARE_WATCH_DISABLE_DRIVE_UPLOAD === "1") return { status: "disabled_for_diagnostic" };
   if (hasErrors) return { status: "skipped_run_errors" };
-  const folder = await resolveDriveFolder();
-  if (!folder) {
+  const resolution = await resolveWatchDriveFolder({ configuredPath: process.env.HARDWARE_WATCH_DRIVE_FOLDER_PATH });
+  if (!resolution.path) {
     return {
       status: "not_configured",
-      error: "No synced Google Drive folder was found; set HARDWARE_WATCH_DRIVE_FOLDER_PATH to an authorized local Drive folder.",
+      error: resolution.status === "ambiguous"
+        ? "Multiple matching Google Drive inbox folders found. Set HARDWARE_WATCH_DRIVE_FOLDER_PATH explicitly."
+        : resolution.status === "discovery_limit"
+          ? "Google Drive folder discovery exceeded its bounded limit. Set HARDWARE_WATCH_DRIVE_FOLDER_PATH explicitly."
+          : "No unique authorized Google Drive inbox found. Set HARDWARE_WATCH_DRIVE_FOLDER_PATH to the existing Hardware Watch Alert Inbox folder.",
     };
   }
+  const folder = resolution.path;
   try {
     const uploaded: string[] = [];
     for (const source of reportPaths) {
@@ -95,7 +71,7 @@ async function uploadReports(reportPaths: string[], hasErrors: boolean): Promise
       await copyFile(source, resolve(folder, filename));
       uploaded.push(filename);
     }
-    return { status: "uploaded", folder: driveFolderName, files: uploaded };
+    return { status: "uploaded", folder: "Hardware Watch Alert Inbox", files: uploaded };
   } catch (error) {
     return { status: "failed", folder: driveFolderName, error: error instanceof Error ? error.message : String(error) };
   }
