@@ -45,3 +45,22 @@ Verify that the running watcher searches Facebook Marketplace successfully, dete
 ## Codex assignment
 
 Find the canonical local checkout for OpenTrestle/facebook-marketplace-mcp, review PR #12, then implement Phases 1–2 above. Perform all routine technical work yourself; don't ask the user to run terminal commands. Return a concise evidence-backed report and the safest deployment recommendation. Preserve credentials, existing data, paused schedules and unrelated runners.
+
+## Mac-local diagnostic findings reported November 9
+
+A separate Codex run on the owner's Mac found that the dashboard LaunchAgent was active but **no Hardware Watch search scheduler** existed. The latest local watcher report was November 1, with 84 raw listings and no search errors; Google Drive delivery reported `not_configured`. The watched inbox exists in a **nested** Google Drive folder, not at the direct My Drive root. No active or pending Hardware Watch configuration was saved. The local main checkout has uncommitted pre-existing modifications and is behind the GitHub remote; do not reset, clean, overwrite or fast-forward it blindly.
+
+Codex ran two isolated read-only Mac mini probes (10 results each, 0 errors, identical IDs on the second run). This establishes a usable bounded Marketplace session, **not** sustained freshness, price reductions, or live scheduling. Unverified seller locations remained out of local alerts. A saved regression fixture detected a $900-to-$700 price drop.
+
+The follow-up PR fixes the malformed Mac mini coverage-warning regex and adds tests; expands scoped Google Drive folder discovery up to three levels and fails closed when folders are ambiguous; excludes $0/$1 placeholder Mac alerts; updates the dashboard to support used Mac mini and Studio target configurations. This does not prove a real Drive upload.
+
+### Explicit configuration and rollout decisions still required
+
+1. On the Mac, propose (do **not automatically apply**) a complete active Hardware Watch configuration using the existing dashboard's pending-configuration flow. Preserve Mac mini, Mac Studio **and** the existing Proxmox searches. Use the documented Churchville center and 80 km radius unless the owner changes them. Limit queries/pages conservatively and show the expected request count before approval. **A branch default is not an approved active configuration.**
+2. Prefer the explicit local `HARDWARE_WATCH_DRIVE_FOLDER_PATH` environment variable pointing at the already observed nested **Hardware Watch Alert Inbox** directory. Keep that full private path in local configuration only, not GitHub. The bounded auto-discovery path can be used as an optional fallback if it produces a unique match.
+3. Before any production search, validate the latest PR checkout in a disposable worktree to preserve the existing dirty local checkout, run build/tests and the exact one-query isolated canary with Drive upload disabled.
+4. After separate owner approval, stage and apply the full search configuration, then conduct **one controlled production run**; verify a current local report, a synced Google Drive JSON/Markdown copy, a visible Mac mini dashboard card, and distinct raw/new/price-drop counts.
+5. Only after a successfully delivered report should the owner consider approving a dedicated Hardware Watch scheduler and the paused ChatGPT Hardware Deal Alerts automation. The dashboard-only LaunchAgent is not a search scheduler. No schedule or notification automation has been enabled by this PR.
+6. Before approving scheduling, explicitly choose the cadence, search query bounds, alert channels, threshold/quality criteria, health warnings, retention and rollback steps.
+
+Do not merge or activate merely because GitHub CI passes.
