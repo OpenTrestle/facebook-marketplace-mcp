@@ -102,6 +102,8 @@ The collapsible **Run history & health** section reads only saved `report-*.json
 
 The Free Finds panel includes a compact saved-report health summary with the recorded status, last attempt, last success, 36-hour stale threshold, and malformed-report count. These values come only from saved reports; unavailable fields remain labeled unavailable, and stale or failed results are not presented as current.
 
+The saved-results history also shows the latest report's per-query health when the report records it: each query's returned count or unavailable count, plus its recorded error when present. Missing per-query data remains explicitly unavailable; this summary does not retry searches or infer that an empty result means no Marketplace inventory exists.
+
 It also shows a **Needs attention** count summary for new, reappeared, changed, and unreviewed saved listings, stale result rows, malformed reports, and listings with unavailable distance or price. These are review signals only; they do not confirm that an item is free, available, profitable, or verified.
 
 The saved Free Finds view also exposes a price signal filter and sort: **Listed at $0**, **Listed as free**, **Other price**, or **Price unavailable**. These are listing signals only; every result remains unconfirmed until manual review, so `$0` is never presented as proof that an item is genuinely free.
@@ -125,6 +127,8 @@ The Free Finds sort menu also exposes **Price signal**. It orders only the saved
 The saved-results sort menu also exposes **Action priority (saved signals)**. It places unreviewed listings first, then orders retained-history signals (new, reappeared, changed, repeated), with price-signal, distance, and run-time tie-breakers. This is a review-order shortcut based only on saved metadata; it is not a valuation and does not confirm that an item is free, available, working, or unclaimed. The choice remains browser-local with the other Free Finds view preferences.
 
 The saved-results controls also provide a **Needs verification** evidence filter. It narrows the view to saved listings with a `$0` signal, free wording, unavailable price, or unavailable distance. These are manual-review cues only: the filter does not confirm that an item is free, available, local, working, or unclaimed, and its selection is stored only in browser-local view preferences.
+
+The Free Finds results view also shows an **Active Free Finds filters** summary beside the saved-run count. It lists the current text, saved-query, history, triage, review, price-signal, evidence, distance, and sort choices, or explicitly says `none`. This is a browser view aid only: it reflects the current saved-results view and does not change reports, review data, scheduler state, or any claim about free status, availability, locality, condition, or value.
 
 Free Finds also supports deliberate bulk review of the currently visible filtered listings. Each visible card can be selected, the toolbar shows the affected count, and applying a reviewed status requires explicit confirmation. The isolated bulk write updates only review status in `free-finds-reviews.json`; it preserves pickup tracking, notes, price signals, report facts, availability, distance, photos, and health. Selected items leave the default unreviewed triage view but remain in **All saved listings** and review-status filters. Bulk review is a personal organizer action, not seller contact, availability confirmation, or proof that an item is free.
 
