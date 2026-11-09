@@ -758,3 +758,28 @@ test("checklist content uses only saved facts and existing missing-check evidenc
   assert.match(checklist, /128 GB RAM target/);
   assert.doesNotMatch(checklist, /contact seller|send|compatible|works/);
 });
+
+test("shows affordable Mac minis and M1 Max Studios as separate best-match categories", async () => {
+  const directory = await fixture({
+    runAt: "2026-10-13T02:14:40.375Z",
+    errors: [],
+    rawListings: [
+      { id: "mini", title: "Apple Mac mini M2 Pro 32GB 512GB SSD", price: "$450", location: "Baltimore, MD", url: "https://example.test/mini", kind: "mac" },
+      { id: "studio", title: "Apple Mac Studio M1 Max 32GB 512GB SSD", price: "$750", location: "Baltimore, MD", url: "https://example.test/studio", kind: "mac" },
+      { id: "unknown", title: "Apple Mac mini M4 Pro", price: "$525", location: "Hershey, Pennsylvania", url: "https://example.test/unknown", kind: "mac" },
+      { id: "placeholder", title: "Apple Mac mini M4 Pro 24GB", price: "$1", location: "Baltimore, MD", url: "https://example.test/placeholder", kind: "mac" },
+      { id: "weak", title: "Apple Mac mini M1 8GB", price: "$300", location: "Baltimore, MD", url: "https://example.test/weak", kind: "mac" },
+    ],
+    deduplicatedListingCount: 5,
+  });
+  try {
+    const data = await loadDashboardData(directory, new Date("2026-10-13T03:00:00Z"));
+    assert.deepEqual(data.candidates.map((listing) => listing.id).sort(), ["mini", "studio"]);
+    assert.equal(data.candidates.find((listing) => listing.id === "mini")?.category, "Mac mini");
+    assert.equal(data.candidates.find((listing) => listing.id === "studio")?.category, "Mac Studio");
+    assert.equal(data.diagnostics.some((listing) => listing.id === "unknown"), true);
+    assert.equal(data.diagnostics.some((listing) => listing.id === "placeholder"), true);
+    assert.equal(data.diagnostics.some((listing) => listing.id === "weak"), true);
+    assert.match(data.candidates.find((listing) => listing.id === "mini")?.priceAssessment ?? "", /Price alone does not prove a bargain/);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
