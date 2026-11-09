@@ -33,6 +33,7 @@ type Listing = {
   location: string;
   url: string;
   is_pending: boolean;
+  posted_date?: string;
   latitude?: number;
   longitude?: number;
   location_latitude?: number;
@@ -150,9 +151,11 @@ function markdownReport(report: any): string {
     `Read-only Facebook Marketplace search around Churchville, Maryland (${center.latitude}, ${center.longitude}), radius ${radiusKm} km.`,
     "Bounded method: per-query limits and page counts from the applied local configuration; no Marketplace monitors, no seller contact, no purchases.",
     "",
-    `New qualifying IDs not in prior watcher state: ${report.newListings.length}`,
+    `New verified-local qualifying IDs not in prior watcher state: ${report.newListings.length}`,
+    `Mac bargains needing location review: ${report.macNeedsLocationReview.length}`,
+    `Mac offers Facebook reports posted within 7 days: ${report.recentMacPosts.length}`,
     `New IDs since previous comparable snapshot: ${report.snapshotComparisonStatus === "available" ? report.newSincePreviousSnapshot.length : "unavailable"}`,
-    "Newly posted Marketplace items: unavailable from saved report evidence.",
+    "Facebook posting timestamps are provider-reported, not independently verified; first-seen and newly posted are different concepts.",
     `Disappeared since previous snapshot: ${report.disappearedSincePreviousSnapshot.length}`,
     `Reappeared after an absence: ${report.reappearedSincePreviousSnapshot.length}`,
     `Search errors: ${report.errors.length}`,
@@ -164,6 +167,16 @@ function markdownReport(report: any): string {
   for (const listing of report.newListings) {
     lines.push(`- **${listing.title}** — ${listing.price} — ${listing.location} — ${listing.url}`);
     lines.push(`  - category: ${listing.kind}; score: ${listing.score}; distance: ${listing.distanceLabel}; pending: ${listing.is_pending}`);
+  }
+  lines.push("", "## Mac bargains — location needs verification (NOT confirmed local)", "");
+  for (const listing of report.macNeedsLocationReview) {
+    lines.push(`- **${listing.title}** — ${listing.price} — ${listing.location} — ${listing.url}`);
+    lines.push(`  - distance unverified; score: ${listing.score}; manually confirm location and specs`);
+  }
+  lines.push("", "## Mac offers Facebook reports posted within seven days (NOT independently verified)", "");
+  for (const listing of report.recentMacPosts) {
+    lines.push(`- **${listing.title}** — ${listing.price} — ${listing.location} — ${listing.url}`);
+    lines.push(`  - Facebook posted date: ${listing.posted_date}; ${listing.distanceLabel}`);
   }
   lines.push("", "## Raw returned listings", "");
   for (const listing of report.rawListings) {
@@ -210,6 +223,9 @@ const searchRun = await runMcpSearches({
       radius_km: radiusKm,
       limit: search.limit,
       max_pages: search.maxPages,
+      // Suggested order can repeatedly return the same first-page inventory.
+      // Request newest-first for Macs while leaving the other hardware watches unchanged.
+      ...(search.kind === "mac" ? { sort_by: "date_listed" } : {}),
       response_format: "json",
     };
     if (search.minPrice !== null) args.min_price = search.minPrice;
@@ -258,6 +274,20 @@ const rawListings = [...allListings.values()].map((listing) => {
   };
 });
 const genuineListings = rawListings.filter((listing) => !listing.diagnosticOnly);
+// Keep the local-only alert contract unchanged. Unverified locations are
+// visible for manual review without being misrepresented as confirmed nearby.
+const macNeedsLocationReview = genuineListings
+  .filter((listing) => listing.kind === "mac" && listing.score >= 0 && listing.distanceStatus === "unverified")
+  .sort((a, b) => b.score - a.score || a.title.localeCompare(b.title));
+const reportTimeMs = Date.parse(runAt);
+const recentMacPosts = genuineListings
+  .filter((listing) => {
+    const postedMs = typeof listing.posted_date === "string" ? Date.parse(listing.posted_date) : NaN;
+    return listing.kind === "mac" && listing.score >= 0 && listing.distanceStatus !== "out_of_radius"
+      && Number.isFinite(postedMs) && postedMs <= reportTimeMs
+      && postedMs >= reportTimeMs - 7 * 24 * 60 * 60 * 1000;
+  })
+  .sort((a, b) => Date.parse(b.posted_date ?? "") - Date.parse(a.posted_date ?? ""));
 const newListings = genuineListings
   .filter((listing) => !previousIds.has(listing.id) && listing.isCandidate)
   .sort((a, b) => b.score - a.score || a.title.localeCompare(b.title));
@@ -287,6 +317,8 @@ const report = {
   results,
   errors,
   newListings,
+  macNeedsLocationReview,
+  recentMacPosts,
   newSincePreviousSnapshot: snapshotComparisonStatus === "available" ? newSincePreviousSnapshot : [],
   snapshotComparisonStatus,
   newlyPostedListings: null,
