@@ -41,6 +41,11 @@ export const DEFAULT_WATCH_CONFIG: WatchConfig = {
   },
 };
 
+/** Tests actual watch queries, not generic references to the Mac mini in settings. */
+export function hasMacMiniSearch(queries: readonly Pick<WatchQueryConfig, "kind" | "query">[]): boolean {
+  return queries.some((item) => item.kind === "mac" && /\bmac\s+mini\b/i.test(item.query));
+}
+
 export const PENDING_FILENAME = "pending-configuration.json";
 export const ACTIVE_FILENAME = "active-configuration.json";
 export const BACKUP_FILENAME = "active-configuration.backup.json";
