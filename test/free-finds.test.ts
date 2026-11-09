@@ -121,6 +121,29 @@ test("Free Finds run history deduplicates stable IDs and reports new/changed lis
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
+test("Free Finds history preserves per-query counts and errors for review", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "free-finds-query-health-"));
+  try {
+    await writeFile(join(directory, "free-finds-report-2026-10-15T01-00-00-000Z.json"), JSON.stringify({
+      runAt: "2026-10-15T01:00:00.000Z",
+      errors: [{ stage: "search", query: "free computers", error: "timed out" }],
+      queries: [
+        { query: "free computers", count: 0, pages: 1, error: "timed out" },
+        { query: "free desks", count: 3, pages: 1 },
+        { query: "legacy", count: "unknown", pages: null },
+      ],
+      rawListings: [],
+    }));
+    const history = await loadFreeFindsRunHistory(directory, new Date("2026-10-15T02:00:00Z"));
+    assert.deepEqual(history[0].queryHealth, [
+      { query: "free computers", count: 0, pages: 1, error: "timed out" },
+      { query: "free desks", count: 3, pages: 1, error: null },
+      { query: "legacy", count: null, pages: null, error: null },
+    ]);
+    assert.match(history[0].errors.join(" "), /timed out/);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
 test("Free Finds marks duplicate status unavailable when no readable listing snapshot exists", async () => {
   const directory = await mkdtemp(join(tmpdir(), "free-finds-no-snapshot-"));
   try {

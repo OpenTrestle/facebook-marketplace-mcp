@@ -102,6 +102,8 @@ The collapsible **Run history & health** section reads only saved `report-*.json
 
 The Free Finds panel includes a compact saved-report health summary with the recorded status, last attempt, last success, 36-hour stale threshold, and malformed-report count. These values come only from saved reports; unavailable fields remain labeled unavailable, and stale or failed results are not presented as current.
 
+The saved-results history also shows the latest report's per-query health when the report records it: each query's returned count or unavailable count, plus its recorded error when present. Missing per-query data remains explicitly unavailable; this summary does not retry searches or infer that an empty result means no Marketplace inventory exists.
+
 It also shows a **Needs attention** count summary for new, reappeared, changed, and unreviewed saved listings, stale result rows, malformed reports, and listings with unavailable distance or price. These are review signals only; they do not confirm that an item is free, available, profitable, or verified.
 
 The saved Free Finds view also exposes a price signal filter and sort: **Listed at $0**, **Listed as free**, **Other price**, or **Price unavailable**. These are listing signals only; every result remains unconfirmed until manual review, so `$0` is never presented as proof that an item is genuinely free.
