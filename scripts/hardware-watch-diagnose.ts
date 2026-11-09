@@ -10,7 +10,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { pathToFileURL } from "node:url";
-import { loadActiveWatchConfig, configPaths } from "./hardware-watch-config.js";
+import { hasMacMiniSearch, loadActiveWatchConfig, configPaths } from "./hardware-watch-config.js";
 
 const execFile = promisify(execFileCallback);
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -83,7 +83,7 @@ export async function diagnoseWatch(root: string, now = new Date()): Promise<Rec
   const warnings: string[] = [];
   if (!report) warnings.push("No readable saved Hardware Watch report exists.");
   else if (ageHours !== null && ageHours > 36) warnings.push("Latest local report is older than 36 hours; check scheduling and search/report delivery.");
-  if (!macQueries.some((item) => /mac\s+mini/i.test(item.query))) warnings.push("Active configuration does not search for Mac minis.");
+  if (!hasMacMiniSearch(macQueries)) warnings.push("Active configuration does not search for Mac minis.");
   if (report?.driveUpload?.status && report.driveUpload.status !== "uploaded") warnings.push("Last report was not confirmed uploaded to Drive.");
   if (Array.isArray(report?.errors) && report.errors.length) warnings.push("Latest report contains search errors.");
   if (report && Array.isArray(report.results)) {
