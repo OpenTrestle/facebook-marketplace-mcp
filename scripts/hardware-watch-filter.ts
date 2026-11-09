@@ -149,7 +149,9 @@ export function candidateScore(listing: WatchListing, kind: string): number {
   const price = priceValue(listing.price);
   if (price === null) return -10;
   if (kind === "mac") {
-    if (!hasMacTarget(text)) return -10;
+    // $0/$1 are common placeholder prices; retain them in raw evidence,
+    // but do not promote them into confirmed purchase alerts.
+    if (price <= 1 || !hasMacTarget(text)) return -10;
     const isMini = /\bmac\s+mini\b/.test(text);
     // These are discovery ceilings, not estimates of market value. Never
     // exclude an otherwise relevant machine because its price is *too low*.
