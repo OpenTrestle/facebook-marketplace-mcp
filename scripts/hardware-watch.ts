@@ -289,9 +289,9 @@ progress("filtering: processing returned listings");
 const runAt = new Date().toISOString();
 const rawListings = [...allListings.values()].map((listing) => {
   const diagnosticOnly = isSyntheticPlaceholderId(listing.id);
-  const distance = classifyDistance(listing);
+  const distance = classifyDistance(listing, center, radiusKm);
   const score = candidateScore(listing, listing.kind);
-  const isCandidate = !diagnosticOnly && qualifiesAsLocalCandidate(listing, listing.kind);
+  const isCandidate = !diagnosticOnly && qualifiesAsLocalCandidate(listing, listing.kind, center, radiusKm);
   return {
     ...listing,
     score,
