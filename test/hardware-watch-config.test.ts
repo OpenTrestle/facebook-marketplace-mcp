@@ -138,6 +138,7 @@ test("default Mac search coverage includes both Minis and Studios", () => {
   assert.ok(macQueries.includes("Mac mini M2 Pro"));
   assert.ok(macQueries.includes("Mac mini M4 Pro"));
   assert.ok(macQueries.includes("Mac Studio"));
+  assert.ok(macQueries.includes("Mac Studio M1 Max"));
   assert.ok(macQueries.some((query) => query.includes("M2 Max")));
 });
 
