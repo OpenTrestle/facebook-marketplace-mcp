@@ -87,3 +87,11 @@ test("does not mistake Mac accessories for complete Macs", () => {
   const accessory = listing({ title: "Satechi Stand Hub for Mac mini or Mac Studio", price: "$25" });
   assert.equal(candidateScore(accessory, "mac"), -10);
 });
+
+test("uses the active radius and center, not the default location constants", () => {
+  const baltimore = listing({ location: "Baltimore, Maryland" });
+  assert.equal(classifyDistance(baltimore).status, "in_radius");
+  assert.equal(classifyDistance(baltimore, { latitude: 39.56, longitude: -76.25 }, 10).status, "out_of_radius");
+  assert.equal(qualifiesAsLocalCandidate(baltimore, "mac", { latitude: 39.56, longitude: -76.25 }, 10), false);
+  assert.equal(classifyDistance(baltimore, { latitude: 39.2904, longitude: -76.6122 }, 10).status, "in_radius");
+});
