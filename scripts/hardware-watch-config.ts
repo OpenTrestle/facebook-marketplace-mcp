@@ -31,7 +31,7 @@ export const DEFAULT_WATCH_CONFIG: WatchConfig = {
   radiusKm: WATCH_RADIUS_KM,
   queries: [
     ["mac", "Mac mini"], ["mac", "Mac mini M2 Pro"], ["mac", "Mac mini M4 Pro"],
-    ["mac", "Mac Studio"], ["mac", "Mac Studio Max"], ["mac", "Mac Studio M2 Max"], ["mac", "Mac Studio Ultra"], ["mac", "Mac Studio M2 Ultra"],
+    ["mac", "Mac Studio"], ["mac", "Mac Studio M1 Max"], ["mac", "Mac Studio Max"], ["mac", "Mac Studio M2 Max"], ["mac", "Mac Studio Ultra"], ["mac", "Mac Studio M2 Ultra"],
     ["proxmox", "i7-12700 workstation"], ["proxmox", "OptiPlex 7000 Tower i7-12700"], ["proxmox", "ThinkStation P360 Tower"],
     ["proxmox", "HP Z2 G9 Tower"], ["proxmox", "128GB DDR4 RAM"], ["proxmox", "512GB NVMe SSD"], ["proxmox", "CPU motherboard RAM combo"],
   ].map(([kind, query]) => ({ kind: kind as "mac" | "proxmox", query, limit: 10, maxPages: 1, minPrice: null, maxPrice: null })),
