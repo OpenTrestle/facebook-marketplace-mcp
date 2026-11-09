@@ -19,7 +19,7 @@ export type FreeFindsRun = {
   warnings: string[];
   comparisonSource: string | null;
 };
-export type FreeFindsHistoryClassification = "NEW" | "SEEN" | "REAPPEARED";
+export type FreeFindsHistoryClassification = "NEW" | "SEEN" | "REAPPEARED" | "HISTORY-UNAVAILABLE";
 export type FreeFindsListing = Record<string, any> & {
   id: string;
   title: string;
@@ -29,7 +29,7 @@ export type FreeFindsListing = Record<string, any> & {
   changeType: "new" | "updated" | "unchanged" | "unknown";
   changedFields: FreeFindsChange[];
   priceSignal: "listed_at_zero" | "listed_as_free" | "other_price" | "price_unavailable";
-  historyPresence: "new" | "repeat" | "reappeared";
+  historyPresence: "new" | "repeat" | "reappeared" | "unavailable";
   historyClassification: FreeFindsHistoryClassification;
   priorRunCount: number;
   firstSeenRunAt: string | null;
@@ -255,6 +255,7 @@ export async function loadFreeFindsListings(root: string, now = new Date()): Pro
   let priorData: Record<string, any> | null = null;
   if (prior) { try { priorData = JSON.parse(await readFile(join(root, prior.name), "utf8")) as Record<string, any>; } catch { /* history already reports this */ } }
   const before = priorData ? new Map(listings(priorData).map((item) => [item.id, item])) : null;
+  const comparisonUnavailable = typeof data.previousRunAt === "string" && !priorData;
   const priorPresence = new Map<string, { count: number; firstSeenRunAt: string | null }>();
   for (const priorRun of history.slice(1)) {
     if (priorRun.status === "malformed") continue;
@@ -272,8 +273,8 @@ export async function loadFreeFindsListings(root: string, now = new Date()): Pro
     const changeType: FreeFindsListing["changeType"] = !before ? "unknown" : before.has(item.id) ? (changedFields.length ? "updated" : "unchanged") : "new";
     const priceSignal = classifyFreeFindsPrice(item.price);
     const presence = priorPresence.get(item.id);
-    const historyPresence: FreeFindsListing["historyPresence"] = presence ? (before?.has(item.id) ? "repeat" : "reappeared") : "new";
-    const historyClassification: FreeFindsHistoryClassification = historyPresence === "new" ? "NEW" : historyPresence === "repeat" ? "SEEN" : "REAPPEARED";
+    const historyPresence: FreeFindsListing["historyPresence"] = comparisonUnavailable ? "unavailable" : presence ? (before?.has(item.id) ? "repeat" : "reappeared") : "new";
+    const historyClassification: FreeFindsHistoryClassification = comparisonUnavailable ? "HISTORY-UNAVAILABLE" : historyPresence === "new" ? "NEW" : historyPresence === "repeat" ? "SEEN" : "REAPPEARED";
     return { ...item, imageUrl: normalizeFreeFindsImageUrl(item.image_url ?? item.imageUrl), runAt: latest.runAt, review: reviews.reviews[item.id] ?? { status: "Unreviewed", pickupStatus: "None", pickupNotes: "", pickupAt: null, notes: "", reviewedAt: null }, changeType, changedFields, priceSignal, historyPresence, historyClassification, priorRunCount: presence?.count ?? 0, firstSeenRunAt: presence?.firstSeenRunAt ?? latest.runAt };
   });
   return { listings: items, runAt: latest.runAt, status: latest.status, message: health.message, issues: [...latest.warnings, ...malformedIssues, ...reviews.issues, ...(failureReason ? [`Latest attempt failed: ${failureReason}`] : [])], health };

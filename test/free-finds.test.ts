@@ -200,6 +200,20 @@ test("Free Finds classifies a listing present in the immediately prior saved run
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
+test("Free Finds fails closed when the immediate comparison report is missing", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "free-finds-history-missing-comparison-"));
+  try {
+    await writeFile(join(directory, "free-finds-report-2026-10-14T01-00-00-000Z.json"), JSON.stringify({ runAt: "2026-10-14T01:00:00.000Z", errors: [], rawListings: [{ id: "reappearing", title: "Older sighting", price: "$0" }] }));
+    await writeFile(join(directory, "free-finds-report-2026-10-14T03-00-00-000Z.json"), JSON.stringify({ runAt: "2026-10-14T03:00:00.000Z", previousRunAt: "2026-10-14T02:00:00.000Z", errors: [], rawListings: [{ id: "reappearing", title: "Current sighting", price: "$0" }] }));
+    const view = await loadFreeFindsListings(directory, new Date("2026-10-14T04:00:00Z"));
+    const listing = view.listings.find((item) => item.id === "reappearing")!;
+    assert.notEqual(listing.historyClassification, "REAPPEARED");
+    assert.equal(listing.historyClassification, "HISTORY-UNAVAILABLE");
+    assert.equal(listing.historyPresence, "unavailable");
+    assert.match(view.issues.join(" "), /recorded comparison report .* is missing/i);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
 test("Free Finds keeps records without a stable ID explicitly unclassified", async () => {
   const directory = await mkdtemp(join(tmpdir(), "free-finds-history-identity-"));
   try {
