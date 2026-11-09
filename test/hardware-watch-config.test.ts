@@ -130,3 +130,12 @@ test("discards only a confirmed pending config and preserves active config and b
     assert.equal(await readFile(paths.backup, "utf8"), backupBefore);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+
+test("default Mac search coverage includes both Minis and Studios", () => {
+  const macQueries = DEFAULT_WATCH_CONFIG.queries.filter((item) => item.kind === "mac").map((item) => item.query);
+  assert.ok(macQueries.includes("Mac mini"));
+  assert.ok(macQueries.includes("Mac mini M2 Pro"));
+  assert.ok(macQueries.includes("Mac mini M4 Pro"));
+  assert.ok(macQueries.includes("Mac Studio"));
+  assert.ok(macQueries.some((query) => query.includes("M2 Max")));
+});
