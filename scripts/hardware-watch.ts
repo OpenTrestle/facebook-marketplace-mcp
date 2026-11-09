@@ -44,7 +44,7 @@ type Listing = {
 
 type State = { seenIds: string[]; lastRunAt: string | null; lastSnapshotIds?: string[] };
 type DriveUpload = {
-  status: "uploaded" | "not_configured" | "skipped_run_errors" | "failed";
+  status: "uploaded" | "not_configured" | "skipped_run_errors" | "disabled_for_diagnostic" | "failed";
   folder?: string;
   files?: string[];
   error?: string;
@@ -79,6 +79,7 @@ async function resolveDriveFolder(): Promise<string | null> {
 }
 
 async function uploadReports(reportPaths: string[], hasErrors: boolean): Promise<DriveUpload> {
+  if (process.env.HARDWARE_WATCH_DISABLE_DRIVE_UPLOAD === "1") return { status: "disabled_for_diagnostic" };
   if (hasErrors) return { status: "skipped_run_errors" };
   const folder = await resolveDriveFolder();
   if (!folder) {
