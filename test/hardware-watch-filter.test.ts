@@ -95,3 +95,9 @@ test("uses the active radius and center, not the default location constants", ()
   assert.equal(qualifiesAsLocalCandidate(baltimore, "mac", { latitude: 39.56, longitude: -76.25 }, 10), false);
   assert.equal(classifyDistance(baltimore, { latitude: 39.2904, longitude: -76.6122 }, 10).status, "in_radius");
 });
+
+test("keeps placeholder-priced Macs in raw results but out of urgent candidate alerts", () => {
+  assert.equal(candidateScore(listing({ title: "Mac mini M4 24GB", price: "$0" }), "mac"), -10);
+  assert.equal(candidateScore(listing({ title: "Mac Studio M2 Max 64GB", price: "$1" }), "mac"), -10);
+  assert.equal(qualifiesAsLocalCandidate(listing({ title: "Mac mini M4 Pro 24GB", price: "$1" }), "mac"), false);
+});
