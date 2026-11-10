@@ -4,6 +4,14 @@ import { loadFreeFindsReviews, type FreeFindsReview } from "./free-finds-review.
 
 export type FreeFindsChange = { field: "price" | "title" | "location" | "pending/availability" | "URL"; previous: string; current: string };
 export type FreeFindsQueryHealth = { query: string; count: number | null; pages: number | null; error: string | null };
+export type FreeFindsQueryHealthSummary = {
+  queriesAttempted: number | null;
+  pagesCompleted: number | null;
+  totalReturnedResults: number | null;
+  totalUniqueSavedListings: number | null;
+  queryErrors: number | null;
+  overallHealth: "healthy" | "partial" | "unavailable";
+};
 export type FreeFindsRun = {
   name: string;
   runAt: string | null;
@@ -16,6 +24,7 @@ export type FreeFindsRun = {
   changes: Record<string, FreeFindsChange[]>;
   errors: string[];
   queryHealth: FreeFindsQueryHealth[];
+  queryHealthRecorded: boolean;
   warnings: string[];
   comparisonSource: string | null;
 };
@@ -166,6 +175,25 @@ const queryHealth = (value: unknown): FreeFindsQueryHealth[] => Array.isArray(va
     error: typeof item.error === "string" && item.error.trim() ? item.error : null,
   }))
   : [];
+
+export function summarizeFreeFindsQueryHealth(
+  recorded: boolean,
+  entries: FreeFindsQueryHealth[],
+  totalUniqueSavedListings: number | null,
+): FreeFindsQueryHealthSummary {
+  if (!recorded) return { queriesAttempted: null, pagesCompleted: null, totalReturnedResults: null, totalUniqueSavedListings, queryErrors: null, overallHealth: "unavailable" };
+  const pagesComplete = entries.every((entry) => entry.pages !== null);
+  const resultsComplete = entries.every((entry) => entry.count !== null);
+  const queryErrors = entries.filter((entry) => entry.error !== null).length;
+  return {
+    queriesAttempted: entries.length,
+    pagesCompleted: pagesComplete ? entries.reduce((total, entry) => total + (entry.pages ?? 0), 0) : null,
+    totalReturnedResults: resultsComplete ? entries.reduce((total, entry) => total + (entry.count ?? 0), 0) : null,
+    totalUniqueSavedListings,
+    queryErrors,
+    overallHealth: queryErrors ? "partial" : "healthy",
+  };
+}
 const rawListings = (value: Record<string, any>): unknown[] => Array.isArray(value.rawListings) ? value.rawListings : Array.isArray(value.newListings) ? value.newListings : [];
 const identityUnavailableCount = (value: Record<string, any>): number | null => {
   if (!Array.isArray(value.rawListings) && !Array.isArray(value.newListings)) return null;
@@ -219,11 +247,11 @@ export async function loadFreeFindsRunHistory(root: string, now = new Date()): P
   const malformed: FreeFindsRun[] = [];
   for (const name of names) {
     try { const data = JSON.parse(await readFile(join(root, name), "utf8")); if (!isRecord(data)) throw new Error("report is not an object"); reports.push({ name, data, modifiedAt: (await stat(join(root, name))).mtimeMs }); }
-    catch (error) { malformed.push({ name, runAt: null, status: "malformed", listingCount: null, identityUnavailableCount: null, duplicateCount: 0, newIds: [], updatedIds: [], changes: {}, errors: [], queryHealth: [], warnings: [error instanceof Error ? error.message : String(error)], comparisonSource: null }); }
+    catch (error) { malformed.push({ name, runAt: null, status: "malformed", listingCount: null, identityUnavailableCount: null, duplicateCount: 0, newIds: [], updatedIds: [], changes: {}, errors: [], queryHealth: [], queryHealthRecorded: false, warnings: [error instanceof Error ? error.message : String(error)], comparisonSource: null }); }
   }
   reports.sort((a, b) => (Date.parse(String(b.data.runAt ?? "")) || 0) - (Date.parse(String(a.data.runAt ?? "")) || 0) || b.modifiedAt - a.modifiedAt);
   return [...reports.map((report, index) => {
-    const runAt = timestamp(report.data.runAt); const priorAt = timestamp(report.data.previousRunAt); const prior = priorAt ? reports.find((candidate) => timestamp(candidate.data.runAt) === priorAt) : null; const current = listings(report.data); const duplicates = duplicateCount(report.data); const unavailable = identityUnavailableCount(report.data); const before = prior ? new Map(listings(prior.data).map((x) => [x.id, x])) : new Map<string, Record<string, any>>(); const newIds = prior ? current.filter((x) => !before.has(x.id)).map((x) => x.id) : []; const updatedIds = prior ? current.filter((x) => before.has(x.id) && changes(before.get(x.id)!, x).length).map((x) => x.id) : []; const changeMap: Record<string, FreeFindsChange[]> = {}; for (const id of updatedIds) changeMap[id] = changes(before.get(id)!, current.find((x) => x.id === id)!); const runErrors = errors(report.data.errors); const queryHealthEntries = queryHealth(report.data.queries); const warnings: string[] = []; if (!runAt) warnings.push("Run timestamp is missing or invalid."); if (unavailable) warnings.push(`${unavailable} listing record${unavailable === 1 ? "" : "s"} lack a stable listing ID and remain unclassified.`); if (unavailable === null) warnings.push("Listing snapshot is unavailable; new/changed IDs cannot be identified."); if (priorAt && !prior) warnings.push(`The recorded comparison report ${priorAt} is missing.`); if (duplicates) warnings.push(`${duplicates} duplicate listing ID${duplicates === 1 ? "" : "s"} were collapsed for saved-result comparison.`); const stale = !runAt || now.getTime() - Date.parse(runAt) > STALE_AFTER_MS; return { name: report.name, runAt, status: stale ? "stale" : runErrors.length ? "partial" : current.length ? "ready" : "empty", listingCount: unavailable === null ? null : current.length, identityUnavailableCount: unavailable, duplicateCount: duplicates, newIds, updatedIds, changes: changeMap, errors: runErrors, queryHealth: queryHealthEntries, warnings, comparisonSource: prior?.name ?? null };
+    const runAt = timestamp(report.data.runAt); const priorAt = timestamp(report.data.previousRunAt); const prior = priorAt ? reports.find((candidate) => timestamp(candidate.data.runAt) === priorAt) : null; const current = listings(report.data); const duplicates = duplicateCount(report.data); const unavailable = identityUnavailableCount(report.data); const before = prior ? new Map(listings(prior.data).map((x) => [x.id, x])) : new Map<string, Record<string, any>>(); const newIds = prior ? current.filter((x) => !before.has(x.id)).map((x) => x.id) : []; const updatedIds = prior ? current.filter((x) => before.has(x.id) && changes(before.get(x.id)!, x).length).map((x) => x.id) : []; const changeMap: Record<string, FreeFindsChange[]> = {}; for (const id of updatedIds) changeMap[id] = changes(before.get(id)!, current.find((x) => x.id === id)!); const runErrors = errors(report.data.errors); const queryHealthRecorded = Array.isArray(report.data.queries); const queryHealthEntries = queryHealth(report.data.queries); const warnings: string[] = []; if (!runAt) warnings.push("Run timestamp is missing or invalid."); if (unavailable) warnings.push(`${unavailable} listing record${unavailable === 1 ? "" : "s"} lack a stable listing ID and remain unclassified.`); if (unavailable === null) warnings.push("Listing snapshot is unavailable; new/changed IDs cannot be identified."); if (priorAt && !prior) warnings.push(`The recorded comparison report ${priorAt} is missing.`); if (duplicates) warnings.push(`${duplicates} duplicate listing ID${duplicates === 1 ? "" : "s"} were collapsed for saved-result comparison.`); const stale = !runAt || now.getTime() - Date.parse(runAt) > STALE_AFTER_MS; return { name: report.name, runAt, status: stale ? "stale" : runErrors.length ? "partial" : current.length ? "ready" : "empty", listingCount: unavailable === null ? null : current.length, identityUnavailableCount: unavailable, duplicateCount: duplicates, newIds, updatedIds, changes: changeMap, errors: runErrors, queryHealth: queryHealthEntries, queryHealthRecorded, warnings, comparisonSource: prior?.name ?? null };
   }), ...malformed];
 }
 

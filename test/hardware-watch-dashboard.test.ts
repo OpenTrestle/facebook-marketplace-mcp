@@ -654,6 +654,15 @@ test("Free Finds is isolated, configuration/review-only, and has no hourly or Ru
   assert.match(source, /savedRun\.health/);
   assert.match(source, /resultsAreStale/);
   assert.match(source, /freeFindsHealthSummary/);
+  assert.match(source, /freeFindsQueryHealthSummary/);
+  assert.match(source, /freeFindsQueryHealth/);
+  assert.match(source, /queries attempted/);
+  assert.match(source, /pages completed/);
+  assert.match(source, /total returned results/);
+  assert.match(source, /total unique saved listings/);
+  assert.match(source, /query errors/);
+  assert.match(source, /overall health/);
+  assert.match(source, /returned:/);
   assert.match(source, /last attempt/);
   assert.match(source, /last success/);
   assert.match(source, /stale after/);
