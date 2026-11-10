@@ -6,7 +6,7 @@ import test from "node:test";
 import { DEFAULT_FREE_FINDS_CONFIG, estimateFreeFindsWaitMs, normalizeFreeFindsConfig, previewFreeFindsReadiness, saveFreeFindsConfig, validateFreeFindsConfig } from "../scripts/free-finds-config.js";
 import { FREE_FINDS_PICKUP_STATUSES, loadFreeFindsReviews, saveFreeFindsReview, saveFreeFindsReviews } from "../scripts/free-finds-review.js";
 import { ENABLE_FREE_FINDS_CONFIRMATION, setFreeFindsScheduler } from "../scripts/free-finds-scheduler.js";
-import { classifyFreeFindsPrice, compareFreeFindsActionPriority, filterFreeFindsByQuery, FREE_FINDS_STALE_AFTER_MS, freeFindsDistanceAvailable, freeFindsDistanceLabel, loadFreeFindsListings, loadFreeFindsRunHistory, matchesFreeFindsEvidenceFilter, matchesFreeFindsHistoryFilter, matchesFreeFindsTriage, normalizeFreeFindsImageUrl, selectFreeFindsBulkIds, summarizeFreeFindsAttention, summarizeFreeFindsListings } from "../scripts/free-finds-dashboard-lib.js";
+import { classifyFreeFindsPrice, compareFreeFindsActionPriority, filterFreeFindsByQuery, FREE_FINDS_STALE_AFTER_MS, freeFindsDistanceAvailable, freeFindsDistanceLabel, loadFreeFindsListings, loadFreeFindsRunHistory, matchesFreeFindsEvidenceFilter, matchesFreeFindsHistoryFilter, matchesFreeFindsTriage, normalizeFreeFindsImageUrl, selectFreeFindsBulkIds, summarizeFreeFindsAttention, summarizeFreeFindsListings, summarizeFreeFindsQueryHealth } from "../scripts/free-finds-dashboard-lib.js";
 import { DEFAULT_MAX_REQUESTS_PER_MINUTE, INTER_REQUEST_JITTER_MS, WINDOW_WAIT_JITTER_MS } from "../src/utils/rate-limit.js";
 
 test("Free Finds configuration is isolated, validates duplicates, bounds, and unsupported cadence", async () => {
@@ -135,6 +135,7 @@ test("Free Finds history preserves per-query counts and errors for review", asyn
       rawListings: [],
     }));
     const history = await loadFreeFindsRunHistory(directory, new Date("2026-10-15T02:00:00Z"));
+    assert.equal(history[0].queryHealthRecorded, true);
     assert.deepEqual(history[0].queryHealth, [
       { query: "free computers", count: 0, pages: 1, error: "timed out" },
       { query: "free desks", count: 3, pages: 1, error: null },
@@ -142,6 +143,39 @@ test("Free Finds history preserves per-query counts and errors for review", asyn
     ]);
     assert.match(history[0].errors.join(" "), /timed out/);
   } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test("Free Finds query health aggregates exact counts and keeps unique listings separate", () => {
+  assert.deepEqual(summarizeFreeFindsQueryHealth(true, [
+    { query: "free computer", count: 10, pages: 1, error: null },
+    { query: "free electronics", count: 10, pages: 1, error: null },
+    { query: "free GPU", count: 10, pages: 1, error: null },
+  ], 22), {
+    queriesAttempted: 3,
+    pagesCompleted: 3,
+    totalReturnedResults: 30,
+    totalUniqueSavedListings: 22,
+    queryErrors: 0,
+    overallHealth: "healthy",
+  });
+  assert.deepEqual(summarizeFreeFindsQueryHealth(true, [
+    { query: "free computer", count: null, pages: null, error: "timed out" },
+  ], 0), {
+    queriesAttempted: 1,
+    pagesCompleted: null,
+    totalReturnedResults: null,
+    totalUniqueSavedListings: 0,
+    queryErrors: 1,
+    overallHealth: "partial",
+  });
+  assert.deepEqual(summarizeFreeFindsQueryHealth(false, [], null), {
+    queriesAttempted: null,
+    pagesCompleted: null,
+    totalReturnedResults: null,
+    totalUniqueSavedListings: null,
+    queryErrors: null,
+    overallHealth: "unavailable",
+  });
 });
 
 test("Free Finds marks duplicate status unavailable when no readable listing snapshot exists", async () => {
