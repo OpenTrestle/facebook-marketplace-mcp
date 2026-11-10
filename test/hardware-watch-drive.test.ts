@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveWatchDriveFolder } from "../scripts/hardware-watch-drive.js";
@@ -16,7 +16,7 @@ test("finds the actual nested-drive structure without hardcoding account or port
     await mkdir(inbox, { recursive: true });
     const result = await resolveWatchDriveFolder({ home });
     assert.equal(result.status, "auto_discovered");
-    assert.equal(result.path, inbox);
+    assert.equal(result.path, await realpath(inbox));
     assert.equal(result.matches, 1);
   });
 });
@@ -27,7 +27,7 @@ test("supports GoogleDrive- mounted Drive roots in Library/CloudStorage", async 
     await mkdir(inbox, { recursive: true });
     const result = await resolveWatchDriveFolder({ home });
     assert.equal(result.status, "auto_discovered");
-    assert.equal(result.path, inbox);
+    assert.equal(result.path, await realpath(inbox));
   });
 });
 
