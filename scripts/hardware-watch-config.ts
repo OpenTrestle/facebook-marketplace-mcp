@@ -30,7 +30,8 @@ export const DEFAULT_WATCH_CONFIG: WatchConfig = {
   center: WATCH_CENTER,
   radiusKm: WATCH_RADIUS_KM,
   queries: [
-    ["mac", "Mac Studio Max"], ["mac", "Mac Studio M2 Max"], ["mac", "Mac Studio Ultra"], ["mac", "Mac Studio M2 Ultra"],
+    ["mac", "Mac mini"], ["mac", "Mac mini M2 Pro"], ["mac", "Mac mini M4 Pro"],
+    ["mac", "Mac Studio"], ["mac", "Mac Studio M1 Max"], ["mac", "Mac Studio Max"], ["mac", "Mac Studio M2 Max"], ["mac", "Mac Studio Ultra"], ["mac", "Mac Studio M2 Ultra"],
     ["proxmox", "i7-12700 workstation"], ["proxmox", "OptiPlex 7000 Tower i7-12700"], ["proxmox", "ThinkStation P360 Tower"],
     ["proxmox", "HP Z2 G9 Tower"], ["proxmox", "128GB DDR4 RAM"], ["proxmox", "512GB NVMe SSD"], ["proxmox", "CPU motherboard RAM combo"],
   ].map(([kind, query]) => ({ kind: kind as "mac" | "proxmox", query, limit: 10, maxPages: 1, minPrice: null, maxPrice: null })),
@@ -39,6 +40,11 @@ export const DEFAULT_WATCH_CONFIG: WatchConfig = {
     proxmox: "$1,000 all-in build target; 128 GB RAM; compatible modern x86 platform, storage, and any required GPU remain evidence-dependent.",
   },
 };
+
+/** Tests actual watch queries, not generic references to the Mac mini in settings. */
+export function hasMacMiniSearch(queries: readonly Pick<WatchQueryConfig, "kind" | "query">[]): boolean {
+  return queries.some((item) => item.kind === "mac" && /\bmac\s+mini\b/i.test(item.query));
+}
 
 export const PENDING_FILENAME = "pending-configuration.json";
 export const ACTIVE_FILENAME = "active-configuration.json";

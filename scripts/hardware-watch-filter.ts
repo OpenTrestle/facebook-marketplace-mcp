@@ -109,14 +109,18 @@ export function haversineDistanceKm(
   return 6_371 * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
 }
 
-export function classifyDistance(listing: WatchListing): DistanceResult {
+export function classifyDistance(
+  listing: WatchListing,
+  center: { latitude: number; longitude: number } = WATCH_CENTER,
+  radiusKm: number = WATCH_RADIUS_KM,
+): DistanceResult {
   const coordinates = coordinatePair(listing);
   const method = coordinates ? "coordinates" : "known_location";
   const usableCoordinates = coordinates ?? knownLocationCoordinates(listing.location);
   if (!usableCoordinates) return { status: "unverified", distanceKm: null, method: "unverified" };
-  const distanceKm = haversineDistanceKm(WATCH_CENTER, usableCoordinates);
+  const distanceKm = haversineDistanceKm(center, usableCoordinates);
   return {
-    status: distanceKm <= WATCH_RADIUS_KM ? "in_radius" : "out_of_radius",
+    status: distanceKm <= radiusKm ? "in_radius" : "out_of_radius",
     distanceKm: Math.round(distanceKm * 10) / 10,
     method,
   };
@@ -130,9 +134,9 @@ function priceValue(price: string): number | null {
 }
 
 function hasMacTarget(text: string): boolean {
-  return /mac\s+studio/.test(text) &&
-    ((/m2\s+max/.test(text) && /96\s*gb/.test(text)) ||
-      (/m2\s+ultra/.test(text) && /128\s*gb/.test(text)));
+  // Search first, verify specifications later. Exact CPU/RAM matches belong in
+  // ranking and manual review, not in a filter that hides inexpensive Macs.
+  return /\bmac\s+(?:mini|studio)\b/.test(text);
 }
 
 function hasProxmoxEvidence(text: string): boolean {
@@ -145,8 +149,20 @@ export function candidateScore(listing: WatchListing, kind: string): number {
   const price = priceValue(listing.price);
   if (price === null) return -10;
   if (kind === "mac") {
-    if (!hasMacTarget(text) || price < 1_500 || price > 1_900) return -10;
-    return 10;
+    // $0/$1 are common placeholder prices; retain them in raw evidence,
+    // but do not promote them into confirmed purchase alerts.
+    if (price <= 1 || !hasMacTarget(text)) return -10;
+    const isMini = /\bmac\s+mini\b/.test(text);
+    // These are discovery ceilings, not estimates of market value. Never
+    // exclude an otherwise relevant machine because its price is *too low*.
+    if (price > (isMini ? 1_800 : 3_600)) return -10;
+    const priceScore = price <= 600 ? 22
+      : price <= 900 ? 20
+      : price <= 1_200 ? 16
+      : price <= 1_900 ? 10
+      : 6;
+    const memoryEvidence = /\b(?:24|32|36|48|64|96|128|192)\s*gb\b/.test(text) ? 1 : 0;
+    return priceScore + memoryEvidence;
   }
   if (kind !== "proxmox" || price > 1_000 || !hasProxmoxEvidence(text)) return -10;
   return price === 0 ? 9 : 6;
@@ -155,7 +171,9 @@ export function candidateScore(listing: WatchListing, kind: string): number {
 export function qualifiesAsLocalCandidate(
   listing: WatchListing,
   kind: string,
+  center: { latitude: number; longitude: number } = WATCH_CENTER,
+  radiusKm: number = WATCH_RADIUS_KM,
 ): boolean {
-  const distance = classifyDistance(listing);
+  const distance = classifyDistance(listing, center, radiusKm);
   return distance.status === "in_radius" && candidateScore(listing, kind) >= 0;
 }

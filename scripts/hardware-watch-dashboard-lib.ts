@@ -13,7 +13,7 @@ export type DashboardListing = {
   location: string;
   url: string;
   kind: "mac" | "proxmox" | "unknown";
-  category: "Mac Studio" | "Proxmox" | "Unknown";
+  category: "Mac mini" | "Mac Studio" | "Proxmox" | "Unknown";
   distanceStatus: "in_radius" | "out_of_radius" | "unverified";
   distanceKm: number | null;
   distanceLabel: string;
@@ -168,10 +168,11 @@ function parsePrice(value: unknown): { value: number | null; assessment: string 
   return { value: Number(match[1]), assessment: `Asking price ${price}.` };
 }
 
-function comparePrice(kind: DashboardListing["kind"], value: number | null, assessment: string): string {
+function comparePrice(kind: DashboardListing["kind"], value: number | null, assessment: string, title = ""): string {
   if (value === null) return assessment;
   if (kind === "mac") {
-    return `${assessment} Within the documented $1,500–$1,900 Mac Studio target band.`;
+    if (/\bmac\s+studio\b/i.test(title) && value >= 1_500 && value <= 1_900) return `${assessment} Within the documented $1,500–$1,900 Mac Studio target band.`;
+    return `${assessment} Price alone does not prove a bargain; verify the configuration and comparable asking/sold prices.`;
   }
   if (kind === "proxmox") {
     if (value <= 1_000) return `${assessment} Asking price is below the documented $1,000 all-in Proxmox build budget; total build cost is unknown because required parts and upgrades are not priced.`;
@@ -192,6 +193,26 @@ function targetEvaluation(value: Record<string, unknown>, kind: "mac" | "proxmox
   const missingSpecs: string[] = [];
   if (kind === "mac") {
     if (/\bmacbook\b/.test(text)) return { supported: false, targetFit: "MacBook, not a Mac Studio", missingSpecs: ["Mac Studio model"], score: 0, proxmoxGroup: null, proxmoxBuildFit: null };
+    // First-stage native iOS development Macs remain visible beyond the old Studio target.
+    const isMini = /\bmac\s+mini\b/.test(text);
+    const ramMatch = text.match(/\b(8|16|24|32|36|48|64|96|128|192)\s*gb\b/);
+    const ramGb = ramMatch ? Number(ramMatch[1]) : null;
+    const supportedMac = (targetFit: string, score: number) => ({
+      supported: true, targetFit,
+      missingSpecs: /\b(?:\d+)\s*tb\b|\b\d+\s*gb\s*(?:ssd|storage)\b/.test(text) ? [] : ["SSD capacity not stated"],
+      score, proxmoxGroup: null, proxmoxBuildFit: null,
+    });
+    if (isMini) {
+      if (/\bm4\s+pro\b/.test(text) && ramGb !== null && ramGb >= 24) return supportedMac("Mac mini M4 Pro used development workstation", 70);
+      if (/\bm2\s+pro\b/.test(text) && ramGb !== null && ramGb >= 32) return supportedMac("Mac mini M2 Pro used development workstation", 64);
+      if (/\bm[1-9](?:\s+pro)?\b/.test(text) && ramGb !== null && ramGb >= 24) return supportedMac("Apple Silicon Mac mini with at least 24 GB — verify exact model", 48);
+      return { supported: false, targetFit: "Mac mini — model or minimum 24 GB unified memory not confirmed", missingSpecs: ["M-series chip and 24+ GB unified memory"], score: 0, proxmoxGroup: null, proxmoxBuildFit: null };
+    }
+    if (/\bmac\s+studio\b/.test(text)) {
+      if (/\bm1\s+max\b/.test(text) && ramGb !== null && ramGb >= 32) return supportedMac("Mac Studio M1 Max used workstation", 60);
+      if (/\bm2\s+max\b/.test(text) && ramGb !== null && ramGb >= 64 && ramGb < 96) return supportedMac("Mac Studio M2 Max high-memory workstation", 66);
+      if (/\bm[3-9]\s+(?:max|ultra)\b/.test(text) && ramGb !== null && ramGb >= 32) return supportedMac("Newer Mac Studio with at least 32 GB — verify exact model", 52);
+    }
     if (!/\bmac\s+studio\b/.test(text)) return { supported: false, targetFit: "Not identified as a Mac Studio", missingSpecs: ["Mac Studio model"], score: 0, proxmoxGroup: null, proxmoxBuildFit: null };
     const isM2Max = /\bm2\s+max\b/.test(text);
     const isM2Ultra = /\bm2\s+ultra\b/.test(text);
@@ -269,8 +290,9 @@ function targetEvaluation(value: Record<string, unknown>, kind: "mac" | "proxmox
   };
 }
 
-function category(kind: unknown): DashboardListing["category"] {
-  return kind === "mac" ? "Mac Studio" : kind === "proxmox" ? "Proxmox" : "Unknown";
+function category(kind: unknown, title: string): DashboardListing["category"] {
+  if (kind === "mac") return /\bmac\s+mini\b/i.test(title) ? "Mac mini" : "Mac Studio";
+  return kind === "proxmox" ? "Proxmox" : "Unknown";
 }
 
 function nextChecksFor(kind: DashboardListing["kind"], evaluation: ReturnType<typeof targetEvaluation>): string[] {
@@ -325,7 +347,7 @@ function normalizeListing(value: unknown, runAt: string | null): DashboardListin
   const distanceKm = distance.distanceKm;
   const score = numberValue(value.score);
   const parsedPrice = parsePrice(value.price);
-  const priceAssessment = comparePrice(kind, parsedPrice.value, parsedPrice.assessment);
+  const priceAssessment = comparePrice(kind, parsedPrice.value, parsedPrice.assessment, value.title);
   const evaluation = targetEvaluation(value, kind, parsedPrice.value);
   const nextChecks = nextChecksFor(kind, evaluation);
   const additionalParts = additionalPartsFor(value, kind, evaluation);
@@ -335,9 +357,12 @@ function normalizeListing(value: unknown, runAt: string | null): DashboardListin
   const locationConfidence = status === "in_radius"
     ? `Verified in radius${distanceKm === null ? " from returned location data" : ` (${distanceKm} km from Churchville)`}.`
     : status === "out_of_radius" ? "Returned location is outside the 80 km radius." : "Location distance is unverified.";
-  const priceEligible = parsedPrice.value !== null && (kind === "mac" ? parsedPrice.value >= 1_500 && parsedPrice.value <= 1_900 : kind === "proxmox" && parsedPrice.value <= 1_000);
+  const miniListing = kind === "mac" && /\bmac\s+mini\b/i.test(value.title);
+  const priceEligible = parsedPrice.value !== null && (kind === "mac"
+    ? parsedPrice.value > 1 && parsedPrice.value <= (miniListing ? 1_800 : 3_600)
+    : kind === "proxmox" && parsedPrice.value <= 1_000);
   const qualifies = status === "in_radius" && evaluation.supported && priceEligible && (kind !== "proxmox" || evaluation.proxmoxGroup !== "incomplete_system");
-  const rankScore = qualifies ? evaluation.score + (kind === "mac" ? Math.max(0, 10 - Math.abs((parsedPrice.value ?? 1_600) - 1_600) / 30) : Math.max(0, 10 - (parsedPrice.value ?? 1_000) / 100)) : null;
+  const rankScore = qualifies ? evaluation.score + (kind === "mac" ? Math.max(0, 15 - (parsedPrice.value ?? 0) / 150) : Math.max(0, 10 - (parsedPrice.value ?? 1_000) / 100)) : null;
   const exclusions = [
     !evaluation.supported ? evaluation.targetFit : "",
     !priceEligible ? priceAssessment : "",
@@ -354,7 +379,7 @@ function normalizeListing(value: unknown, runAt: string | null): DashboardListin
     location: stringValue(value.location),
     url: stringValue(value.url, "#"),
     kind,
-    category: category(kind),
+    category: category(kind, value.title),
     distanceStatus: status,
     distanceKm,
     distanceLabel: distanceKm === null ? "distance unverified" : `${distanceKm} km from Churchville`,

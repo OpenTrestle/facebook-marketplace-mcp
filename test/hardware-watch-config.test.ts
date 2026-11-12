@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import test from "node:test";
 import {
   DEFAULT_WATCH_CONFIG,
+  hasMacMiniSearch,
   applyPendingConfiguration,
   configPaths,
   discardPendingConfiguration,
@@ -129,4 +130,25 @@ test("discards only a confirmed pending config and preserves active config and b
     assert.equal(await readFile(paths.active, "utf8"), activeBefore);
     assert.equal(await readFile(paths.backup, "utf8"), backupBefore);
   } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test("default Mac search coverage includes both Minis and Studios", () => {
+  const macQueries = DEFAULT_WATCH_CONFIG.queries.filter((item) => item.kind === "mac").map((item) => item.query);
+  assert.ok(macQueries.includes("Mac mini"));
+  assert.ok(macQueries.includes("Mac mini M2 Pro"));
+  assert.ok(macQueries.includes("Mac mini M4 Pro"));
+  assert.ok(macQueries.includes("Mac Studio"));
+  assert.ok(macQueries.includes("Mac Studio M1 Max"));
+  assert.ok(macQueries.some((query) => query.includes("M2 Max")));
+});
+
+test("Mac mini coverage detection accepts real whitespace and rejects escaped-literal regex text", () => {
+  const mac = (query: string) => [{ kind: "mac" as const, query }];
+  assert.equal(hasMacMiniSearch(mac("Mac mini")), true);
+  assert.equal(hasMacMiniSearch(mac("Mac mini M4 Pro")), true);
+  assert.equal(hasMacMiniSearch(mac("apple  MAC   mini  32GB")), true);
+  assert.equal(hasMacMiniSearch(mac(String.raw`Mac\s+mini`)), false);
+  assert.equal(hasMacMiniSearch(mac("Mac Studio M2 Max")), false);
+  assert.equal(hasMacMiniSearch([{ kind: "proxmox", query: "Mac mini" }]), false);
+  assert.equal(hasMacMiniSearch([]), false);
 });

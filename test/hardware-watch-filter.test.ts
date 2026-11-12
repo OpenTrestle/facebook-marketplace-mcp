@@ -62,7 +62,42 @@ test("keeps missing or unknown location unverified and out of the alert set", ()
 
 test("does not qualify a Florida result even when its hardware and price look attractive", () => {
   const florida = listing({ location: "Miami, FL", title: "M2 Max Mac Studio 96GB 1TB", price: "$1,500" });
-  assert.equal(candidateScore(florida, "mac"), 10);
+  assert.ok(candidateScore(florida, "mac") >= 10);
   assert.equal(classifyDistance(florida).status, "out_of_radius");
   assert.equal(qualifiesAsLocalCandidate(florida, "mac"), false);
+});
+
+test("does not throw away a good Mac mini or Mac Studio for being too inexpensive", () => {
+  const mini = listing({ title: "Apple Mac mini M2 Pro 32GB RAM 512GB SSD", price: "$450" });
+  const studio = listing({ title: "Mac Studio M1 Max 32GB 512GB", price: "$750" });
+  assert.ok(candidateScore(mini, "mac") >= 0);
+  assert.ok(candidateScore(studio, "mac") >= 0);
+  assert.equal(qualifiesAsLocalCandidate(mini, "mac"), true);
+  assert.equal(qualifiesAsLocalCandidate(studio, "mac"), true);
+});
+
+test("retains unverified Mac bargains for review without falsely confirming locality", () => {
+  const unknownCity = listing({ title: "Mac mini M4 Pro 24GB", price: "$699", location: "Hershey, Pennsylvania" });
+  assert.ok(candidateScore(unknownCity, "mac") >= 0);
+  assert.equal(classifyDistance(unknownCity).status, "unverified");
+  assert.equal(qualifiesAsLocalCandidate(unknownCity, "mac"), false);
+});
+
+test("does not mistake Mac accessories for complete Macs", () => {
+  const accessory = listing({ title: "Satechi Stand Hub for Mac mini or Mac Studio", price: "$25" });
+  assert.equal(candidateScore(accessory, "mac"), -10);
+});
+
+test("uses the active radius and center, not the default location constants", () => {
+  const baltimore = listing({ location: "Baltimore, Maryland" });
+  assert.equal(classifyDistance(baltimore).status, "in_radius");
+  assert.equal(classifyDistance(baltimore, { latitude: 39.56, longitude: -76.25 }, 10).status, "out_of_radius");
+  assert.equal(qualifiesAsLocalCandidate(baltimore, "mac", { latitude: 39.56, longitude: -76.25 }, 10), false);
+  assert.equal(classifyDistance(baltimore, { latitude: 39.2904, longitude: -76.6122 }, 10).status, "in_radius");
+});
+
+test("keeps placeholder-priced Macs in raw results but out of urgent candidate alerts", () => {
+  assert.equal(candidateScore(listing({ title: "Mac mini M4 24GB", price: "$0" }), "mac"), -10);
+  assert.equal(candidateScore(listing({ title: "Mac Studio M2 Max 64GB", price: "$1" }), "mac"), -10);
+  assert.equal(qualifiesAsLocalCandidate(listing({ title: "Mac mini M4 Pro 24GB", price: "$1" }), "mac"), false);
 });
